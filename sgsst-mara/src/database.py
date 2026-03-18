@@ -13,14 +13,14 @@ CREATE TABLE IF NOT EXISTS trabajadores (
     correo TEXT,
     celular TEXT,
     estado TEXT NOT NULL DEFAULT 'ACTIVO',
-    created_at TEXT DEFAULT (datetime('now','localtime'))
+    created_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS documentos_generados (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     dni_trabajador TEXT NOT NULL,
     tipo_documento TEXT NOT NULL,
-    fecha_generacion TEXT DEFAULT (datetime('now','localtime')),
+    fecha_generacion TEXT,
     ruta_archivo TEXT NOT NULL,
     FOREIGN KEY (dni_trabajador) REFERENCES trabajadores(dni)
 );

@@ -58,7 +58,7 @@ def _print_activos(trabajadores: list) -> None:
         cargo  = str(t["cargo"] or "-").ljust(col_cargo)
         print(f"| {dni} | {nombre} | {cargo} |")
     print(sep)
-    print(f"  Total: {len(trabajadores)} trabajador(es) activo(s)")
+    print(f"Total: {len(trabajadores)} trabajadores activos")
 
 
 def _opcion_1() -> None:
@@ -102,9 +102,9 @@ def main() -> None:
             elif opcion == "3":
                 _opcion_3()
             elif opcion == "4":
-                print("  Módulo de generación de documentos: pendiente de implementación")
+                print("Módulo pendiente - disponible en siguiente versión")
             elif opcion == "5":
-                print("  Saliendo. Hasta luego.")
+                print("Saliendo...")
                 break
             else:
                 print("  Opción no válida. Intente de nuevo.")

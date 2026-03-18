@@ -1,10 +1,11 @@
 import openpyxl
+from datetime import datetime
 
 from src.database import get_connection
 
 _INSERT = """
-INSERT OR IGNORE INTO trabajadores (dni, nombre, cargo, fecha_nacimiento, correo, celular, estado)
-VALUES (?, ?, ?, ?, ?, ?, ?)
+INSERT OR IGNORE INTO trabajadores (dni, nombre, cargo, fecha_nacimiento, correo, celular, estado, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 """
 
 
@@ -42,7 +43,8 @@ def importar_trabajadores(ruta_excel: str) -> dict:
                 correo_str = str(correo).strip() if correo is not None else None
                 celular_str = str(celular).strip() if celular is not None else None
 
-                cursor = conn.execute(_INSERT, (dni, nombre, cargo_str, fecha_str, correo_str, celular_str, estado_val))
+                created_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                cursor = conn.execute(_INSERT, (dni, nombre, cargo_str, fecha_str, correo_str, celular_str, estado_val, created_at))
                 if cursor.rowcount == 1:
                     importados += 1
                 else:
