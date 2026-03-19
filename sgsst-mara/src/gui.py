@@ -470,9 +470,13 @@ class App(tk.Tk):
         self._epp_combo = ttk.Combobox(det, width=45, state='readonly')
         self._epp_combo.grid(row=0, column=1, pady=4, sticky='w')
 
-        ttk.Label(det, text="Fecha (dd/mm/yyyy):").grid(row=1, column=0, sticky='e', padx=5, pady=4)
+        ttk.Label(det, text="Área:").grid(row=1, column=0, sticky='e', padx=5, pady=4)
+        self._epp_area_var = tk.StringVar(value="Taller")
+        ttk.Entry(det, textvariable=self._epp_area_var, width=30).grid(row=1, column=1, pady=4, sticky='w')
+
+        ttk.Label(det, text="Fecha (dd/mm/yyyy):").grid(row=2, column=0, sticky='e', padx=5, pady=4)
         self._epp_fecha_var = tk.StringVar(value=datetime.now().strftime('%d/%m/%Y'))
-        ttk.Entry(det, textvariable=self._epp_fecha_var, width=15).grid(row=1, column=1, pady=4, sticky='w')
+        ttk.Entry(det, textvariable=self._epp_fecha_var, width=15).grid(row=2, column=1, pady=4, sticky='w')
 
         # ── lista de EPPs ─────────────────────────────────────────────────────
         epp_frame = ttk.LabelFrame(tab, text="Equipos a Entregar", padding=10)
@@ -508,6 +512,7 @@ class App(tk.Tk):
 
     def _epp_generar(self):
         sel   = self._epp_combo.get()
+        area  = self._epp_area_var.get().strip() or "Taller"
         fecha = self._epp_fecha_var.get().strip()
         epps  = [epp for epp, var in self._epp_vars if var.get()]
 
@@ -530,7 +535,7 @@ class App(tk.Tk):
 
         def run():
             try:
-                ruta = generar_registro_epp(trabajador, epps, fecha)
+                ruta = generar_registro_epp(trabajador, epps, fecha, area)
                 self.after(0, lambda: messagebox.showinfo("Listo", f"Registro guardado en:\n{ruta}"))
             except Exception as exc:
                 self.after(0, lambda: messagebox.showerror("Error", str(exc)))

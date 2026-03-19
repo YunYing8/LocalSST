@@ -48,13 +48,14 @@ def _aln(h="center", v="center", wrap=True):
     return Alignment(horizontal=h, vertical=v, wrap_text=wrap)
 
 
-def generar_registro_epp(trabajador: dict, epps: list[str], fecha: str) -> str:
+def generar_registro_epp(trabajador: dict, epps: list[str], fecha: str, area: str = "Taller") -> str:
     """
     Genera el Excel de Cargo de Entrega de EPP para un trabajador.
 
     trabajador : dict con claves dni, nombre, apellido, cargo
     epps       : lista de nombres de equipos entregados
     fecha      : fecha de entrega (dd/mm/yyyy)
+    area       : área del trabajador (por defecto "Taller")
     Retorna    : ruta del archivo generado
     """
     CARPETA_SALIDA.mkdir(parents=True, exist_ok=True)
@@ -168,7 +169,7 @@ def generar_registro_epp(trabajador: dict, epps: list[str], fecha: str) -> str:
     _merge(13, 1, 13, 2)
     _c("A13", "ÁREA", bold=True, bg=_AZUL_CLAR, size=9)
     _merge(13, 3, 13, 5)
-    _c("C13", "Taller", size=10)
+    _c("C13", area, size=10)
     _c("F13", "PUESTO", bold=True, bg=_AZUL_CLAR, size=9)
     _merge(13, 7, 13, 11)
     _c("G13", cargo, size=10, h="left")
