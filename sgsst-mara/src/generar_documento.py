@@ -1,9 +1,9 @@
 import re
+import subprocess
+import sys
 from datetime import datetime
 from pathlib import Path
 
-import pythoncom
-import win32com.client
 from docx.shared import Cm, Pt
 from docxtpl import DocxTemplate, InlineImage
 
@@ -52,15 +52,25 @@ def _aplicar_fuente(doc: DocxTemplate) -> None:
                         run.font.size = Pt(11)
 
 
-def _docx_a_pdf(ruta_docx: Path, word_app) -> Path:
-    """Convierte un .docx a PDF. Retorna la ruta del PDF generado."""
-    wdFormatPDF = 17
+def _docx_a_pdf(ruta_docx: Path) -> Path:
+    """Convierte un .docx a PDF usando LibreOffice. Retorna la ruta del PDF generado."""
     ruta_pdf = ruta_docx.with_suffix('.pdf')
-    doc = word_app.Documents.Open(str(ruta_docx))
-    try:
-        doc.SaveAs(str(ruta_pdf), FileFormat=wdFormatPDF)
-    finally:
-        doc.Close(False)
+
+    if sys.platform == 'win32':
+        soffice = 'soffice'
+    else:
+        soffice = 'libreoffice'
+
+    subprocess.run(
+        [soffice, '--headless', '--convert-to', 'pdf',
+         '--outdir', str(ruta_docx.parent), str(ruta_docx)],
+        check=True,
+        capture_output=True,
+    )
+
+    if not ruta_pdf.exists():
+        raise RuntimeError(f"PDF no generado: {ruta_pdf}")
+
     return ruta_pdf
 
 
@@ -70,7 +80,6 @@ def generar_constancia(
     apellido: str,
     cargo: str,
     fecha: str,
-    word_app=None,
 ) -> tuple[bool, str]:
     """
     Genera la constancia RISST para un trabajador y la convierte a PDF.
@@ -81,9 +90,6 @@ def generar_constancia(
 
         if not PLANTILLA_RISST.exists():
             return False, f"Plantilla no encontrada: {PLANTILLA_RISST}"
-
-        if word_app is None:
-            return False, "No hay instancia de Word disponible"
 
         doc = DocxTemplate(str(PLANTILLA_RISST))
 
@@ -106,7 +112,7 @@ def generar_constancia(
         ruta_docx   = CARPETA_SALIDA / nombre_docx
         doc.save(str(ruta_docx))
 
-        ruta_pdf   = _docx_a_pdf(ruta_docx, word_app)
+        ruta_pdf   = _docx_a_pdf(ruta_docx)
         nombre_pdf = ruta_pdf.name
 
         with get_connection() as conn:
@@ -139,30 +145,20 @@ def generar_todas_constancias(fecha: str) -> dict:
     fallidos = 0
     log: list[str] = []
 
-    pythoncom.CoInitialize()
-    try:
-        word = win32com.client.Dispatch("Word.Application")
-        word.Visible = False
-        try:
-            for t in trabajadores:
-                ok, msg = generar_constancia(
-                    t['dni'],
-                    t['nombre'],
-                    t['apellido'] or '',
-                    t['cargo'] or '',
-                    fecha,
-                    word_app=word,
-                )
-                if ok:
-                    exitosos += 1
-                    log.append(f"OK   {t['nombre']}  →  {msg}")
-                else:
-                    fallidos += 1
-                    log.append(f"ERR  {t['nombre']}  →  {msg}")
-        finally:
-            word.Quit()
-    finally:
-        pythoncom.CoUninitialize()
+    for t in trabajadores:
+        ok, msg = generar_constancia(
+            t['dni'],
+            t['nombre'],
+            t['apellido'] or '',
+            t['cargo'] or '',
+            fecha,
+        )
+        if ok:
+            exitosos += 1
+            log.append(f"OK   {t['nombre']}  →  {msg}")
+        else:
+            fallidos += 1
+            log.append(f"ERR  {t['nombre']}  →  {msg}")
 
     return {
         "total":    len(trabajadores),

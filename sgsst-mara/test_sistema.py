@@ -11,6 +11,7 @@ from src.trabajadores import (
     cambiar_estado,
 )
 from src.importar_excel import importar_trabajadores
+from src.trabajadores import nombre_completo
 
 passed = 0
 failed = 0
@@ -114,7 +115,7 @@ if __name__ == "__main__":
             "Fecha de nacimiento", "Edad",
             "Correo electrónico", "Celular", "Estado",
         ])
-        # Valid row — nombre stored as "PEREZ LOPEZ JUAN"
+        # Valid row — nombre stored as first name, apellido stored separately
         ws.append([
             "JUAN", "PEREZ LOPEZ", "11111111", "RIGGER",
             "01/01/1985", 40, "juan@test.com", "911000000", "ACTIVO",
@@ -135,8 +136,10 @@ if __name__ == "__main__":
 
         t2 = buscar_por_dni("11111111")
         assert t2 is not None, "Imported worker not found"
+        assert t2["nombre"]  == "JUAN",       f"Unexpected nombre: {t2['nombre']}"
         assert t2["apellido"] == "PEREZ LOPEZ", f"Unexpected apellido: {t2['apellido']}"
-        assert t2["nombre"] == "PEREZ LOPEZ JUAN", f"Unexpected nombre: {t2['nombre']}"
+        assert nombre_completo(t2) == "PEREZ LOPEZ JUAN", \
+            f"Unexpected nombre_completo: {nombre_completo(t2)}"
         assert t2["created_at"] is not None, "created_at missing"
 
     # TEST 8 - cleanup
