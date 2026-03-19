@@ -1,5 +1,5 @@
 """
-Procesador de firmas usando rembg (local, sin API key, sin costo).
+Procesador de firmas usando la API de remove.bg.
 
 Estructura esperada:
     data/firmas_originales/firma_XXXXXXXX.png   ← archivos de entrada
@@ -7,27 +7,41 @@ Estructura esperada:
 
 El nombre del archivo debe seguir el patrón: firma_{DNI}.{ext}
 """
+from io import BytesIO
 from pathlib import Path
+
+import requests
 from PIL import Image
-from rembg import remove
-import io
 
 from src.database import DB_PATH
 
-PROJECT_ROOT      = DB_PATH.parent.parent
-CARPETA_ENTRADA   = PROJECT_ROOT / "data" / "firmas_originales"
-CARPETA_SALIDA    = PROJECT_ROOT / "data" / "firmas"
-ALTO_FINAL        = 65
-_EXTENSIONES      = {'.png', '.jpg', '.jpeg'}
+PROJECT_ROOT    = DB_PATH.parent.parent
+CARPETA_ENTRADA = PROJECT_ROOT / "data" / "firmas_originales"
+CARPETA_SALIDA  = PROJECT_ROOT / "data" / "firmas"
+ALTO_FINAL      = 65
+_EXTENSIONES    = {'.png', '.jpg', '.jpeg'}
+_API_KEY        = "TW85KXjQCpmyVS35yYoeybso"
+_API_URL        = "https://api.remove.bg/v1.0/removebg"
 
 
 def procesar_firma(ruta_entrada: Path, ruta_salida: Path) -> None:
-    """Quita el fondo y redimensiona una firma. Lanza excepción si falla."""
+    """Quita el fondo vía remove.bg y redimensiona una firma. Lanza excepción si falla."""
     with open(ruta_entrada, 'rb') as f:
         datos = f.read()
 
-    output = remove(datos)
-    imagen = Image.open(io.BytesIO(output)).convert("RGBA")
+    response = requests.post(
+        _API_URL,
+        files={'image_file': datos},
+        headers={'X-Api-Key': _API_KEY},
+        data={'size': 'auto'},
+    )
+
+    if response.status_code != 200:
+        raise RuntimeError(
+            f"remove.bg error {response.status_code}: {response.text[:200]}"
+        )
+
+    imagen = Image.open(BytesIO(response.content))
 
     ancho_orig, alto_orig = imagen.size
     proporcion  = ALTO_FINAL / alto_orig
@@ -63,7 +77,6 @@ def procesar_todas_firmas() -> dict:
     ]
 
     for archivo in archivos:
-        # Normalizar a firma_{dni}.png sin importar el nombre original
         stem = archivo.stem
         if not stem.startswith('firma_'):
             stem = f'firma_{stem}'
