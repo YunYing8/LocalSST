@@ -14,6 +14,7 @@ from src.importar_excel import importar_trabajadores
 from src.importar_sheets import sincronizar_desde_sheets
 from src.procesar_firmas import procesar_todas_firmas
 from src.registro_capacitacion import guardar_registro_capacitacion
+from src.registro_epp import EPPS_BASICOS, generar_registro_epp
 from src.trabajadores import buscar_por_dni, listar_activos, nombre_completo
 
 
@@ -60,6 +61,7 @@ class App(tk.Tk):
         self._build_tab_constancias(nb)
         self._build_tab_firmas(nb)
         self._build_tab_capacitaciones(nb)
+        self._build_tab_epp(nb)
 
         init_db()
 
@@ -448,6 +450,92 @@ class App(tk.Tk):
                 self.after(0, lambda: messagebox.showerror("Error", str(exc)))
             finally:
                 self.after(0, self._prog_cap.stop)
+
+        threading.Thread(target=run, daemon=True).start()
+
+
+    # ════════════════════════════════════════════════════════════════════════
+    # TAB 5 — EPPs
+    # ════════════════════════════════════════════════════════════════════════
+
+    def _build_tab_epp(self, nb: ttk.Notebook):
+        tab = ttk.Frame(nb, padding=15)
+        nb.add(tab, text="  EPPs  ")
+
+        # ── datos de la entrega ───────────────────────────────────────────────
+        det = ttk.LabelFrame(tab, text="Datos de la Entrega", padding=10)
+        det.pack(fill='x', pady=(0, 8))
+
+        ttk.Label(det, text="Trabajador:").grid(row=0, column=0, sticky='e', padx=5, pady=4)
+        self._epp_combo = ttk.Combobox(det, width=45, state='readonly')
+        self._epp_combo.grid(row=0, column=1, pady=4, sticky='w')
+
+        ttk.Label(det, text="Fecha (dd/mm/yyyy):").grid(row=1, column=0, sticky='e', padx=5, pady=4)
+        self._epp_fecha_var = tk.StringVar(value=datetime.now().strftime('%d/%m/%Y'))
+        ttk.Entry(det, textvariable=self._epp_fecha_var, width=15).grid(row=1, column=1, pady=4, sticky='w')
+
+        # ── lista de EPPs ─────────────────────────────────────────────────────
+        epp_frame = ttk.LabelFrame(tab, text="Equipos a Entregar", padding=10)
+        epp_frame.pack(fill='x', pady=(0, 8))
+
+        self._epp_vars: list[tuple[str, tk.BooleanVar]] = []
+        for i, epp in enumerate(EPPS_BASICOS):
+            var = tk.BooleanVar(value=True)
+            self._epp_vars.append((epp, var))
+            ttk.Checkbutton(epp_frame, text=epp, variable=var).grid(
+                row=i // 2, column=i % 2, sticky='w', padx=10, pady=2
+            )
+
+        # ── botón ─────────────────────────────────────────────────────────────
+        btns = ttk.Frame(tab)
+        btns.pack(fill='x', pady=(0, 4))
+        ttk.Button(btns, text="Generar registro EPP",
+                   command=self._epp_generar).pack(side='left')
+
+        self._prog_epp = ttk.Progressbar(tab, mode='indeterminate', length=500)
+        self._prog_epp.pack(fill='x')
+
+        self._epp_disponibles: list[dict] = []
+        self._epp_refresh_combo()
+
+    def _epp_refresh_combo(self):
+        self._epp_disponibles = listar_activos()
+        self._epp_combo['values'] = [
+            f"{t['dni']} - {nombre_completo(t)}"
+            for t in self._epp_disponibles
+        ]
+        self._epp_combo.set('')
+
+    def _epp_generar(self):
+        sel   = self._epp_combo.get()
+        fecha = self._epp_fecha_var.get().strip()
+        epps  = [epp for epp, var in self._epp_vars if var.get()]
+
+        if not sel:
+            messagebox.showwarning("Aviso", "Selecciona un trabajador")
+            return
+        if not fecha:
+            messagebox.showwarning("Aviso", "Ingresa una fecha")
+            return
+        if not epps:
+            messagebox.showwarning("Aviso", "Selecciona al menos un EPP")
+            return
+
+        dni        = sel.split(' - ')[0]
+        trabajador = next((t for t in self._epp_disponibles if t['dni'] == dni), None)
+        if trabajador is None:
+            return
+
+        self._prog_epp.start()
+
+        def run():
+            try:
+                ruta = generar_registro_epp(trabajador, epps, fecha)
+                self.after(0, lambda: messagebox.showinfo("Listo", f"Registro guardado en:\n{ruta}"))
+            except Exception as exc:
+                self.after(0, lambda: messagebox.showerror("Error", str(exc)))
+            finally:
+                self.after(0, self._prog_epp.stop)
 
         threading.Thread(target=run, daemon=True).start()
 
