@@ -1,5 +1,5 @@
-python-docx==1.1.2
-openpyxl==3.1.2
-Pillow==10.3.0
-docxtpl==0.19.0
-requests==2.32.3
+python-docx>=1.1.2
+openpyxl>=3.1.2
+Pillow>=10.4.0
+docxtpl>=0.19.0
+requests>=2.32.3
