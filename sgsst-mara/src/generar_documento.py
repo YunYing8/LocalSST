@@ -2,9 +2,9 @@ from pathlib import Path
 from datetime import datetime
 
 import pythoncom
+import win32com.client
 from docxtpl import DocxTemplate, InlineImage
 from docx.shared import Cm, Pt
-from docx2pdf import convert
 
 from src.database import get_connection, DB_PATH
 
@@ -44,12 +44,24 @@ def _aplicar_fuente(doc: DocxTemplate) -> None:
                         run.font.size = Pt(11)
 
 
+def _docx_a_pdf(ruta_docx: Path, word_app) -> None:
+    """Convierte un .docx a PDF usando la instancia de Word proporcionada."""
+    wdFormatPDF = 17
+    doc = word_app.Documents.Open(str(ruta_docx))
+    try:
+        ruta_pdf = str(ruta_docx).replace('.docx', '.pdf')
+        doc.SaveAs(ruta_pdf, FileFormat=wdFormatPDF)
+    finally:
+        doc.Close(False)
+
+
 def generar_constancia(
     dni: str,
     nombre: str,
     apellido: str,
     cargo: str,
     fecha: str,
+    word_app=None,
 ) -> tuple[bool, str]:
     """
     Genera la constancia RISST para un trabajador y la convierte a PDF.
@@ -82,11 +94,7 @@ def generar_constancia(
         ruta_docx   = CARPETA_SALIDA / nombre_docx
         doc.save(str(ruta_docx))
 
-        pythoncom.CoInitialize()
-        try:
-            convert(str(ruta_docx))
-        finally:
-            pythoncom.CoUninitialize()
+        _docx_a_pdf(ruta_docx, word_app)
         nombre_pdf = nombre_docx.replace('.docx', '.pdf')
 
         # Registrar en historial
@@ -125,20 +133,30 @@ def generar_todas_constancias(fecha: str) -> dict:
     fallidos = 0
     log: list[str] = []
 
-    for t in trabajadores:
-        ok, msg = generar_constancia(
-            t['dni'],
-            t['nombre'],
-            t['apellido'] or '',
-            t['cargo'] or '',
-            fecha,
-        )
-        if ok:
-            exitosos += 1
-            log.append(f"OK   {t['nombre']}  →  {msg}")
-        else:
-            fallidos += 1
-            log.append(f"ERR  {t['nombre']}  →  {msg}")
+    pythoncom.CoInitialize()
+    try:
+        word = win32com.client.Dispatch("Word.Application")
+        word.Visible = False
+        try:
+            for t in trabajadores:
+                ok, msg = generar_constancia(
+                    t['dni'],
+                    t['nombre'],
+                    t['apellido'] or '',
+                    t['cargo'] or '',
+                    fecha,
+                    word_app=word,
+                )
+                if ok:
+                    exitosos += 1
+                    log.append(f"OK   {t['nombre']}  →  {msg}")
+                else:
+                    fallidos += 1
+                    log.append(f"ERR  {t['nombre']}  →  {msg}")
+        finally:
+            word.Quit()
+    finally:
+        pythoncom.CoUninitialize()
 
     return {
         "total":    len(trabajadores),
