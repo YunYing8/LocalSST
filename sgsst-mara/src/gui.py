@@ -13,6 +13,7 @@ from src.generar_documento import generar_todas_constancias
 from src.importar_excel import importar_trabajadores
 from src.importar_sheets import sincronizar_desde_sheets
 from src.procesar_firmas import procesar_todas_firmas
+from src.registro_capacitacion import guardar_registro_capacitacion
 from src.trabajadores import buscar_por_dni, listar_activos
 
 
@@ -58,6 +59,7 @@ class App(tk.Tk):
         self._build_tab_trabajadores(nb)
         self._build_tab_constancias(nb)
         self._build_tab_firmas(nb)
+        self._build_tab_capacitaciones(nb)
 
         init_db()
 
@@ -317,6 +319,127 @@ class App(tk.Tk):
                 self.after(0, self._prog_firmas.stop)
 
         threading.Thread(target=run, daemon=True).start()
+
+
+    # ════════════════════════════════════════════════════════════════════════
+    # TAB 4 — CAPACITACIONES
+    # ════════════════════════════════════════════════════════════════════════
+
+    def _build_tab_capacitaciones(self, nb: ttk.Notebook):
+        tab = ttk.Frame(nb, padding=15)
+        nb.add(tab, text="  Capacitaciones  ")
+
+        # ── detalles ─────────────────────────────────────────────────────────
+        det = ttk.LabelFrame(tab, text="Detalles de la Capacitación", padding=10)
+        det.pack(fill='x', pady=(0, 8))
+
+        ttk.Label(det, text="Tema:").grid(row=0, column=0, sticky='e', padx=5, pady=4)
+        self._cap_tema_var = tk.StringVar()
+        ttk.Entry(det, textvariable=self._cap_tema_var, width=45).grid(row=0, column=1, pady=4, sticky='w')
+
+        ttk.Label(det, text="Fecha (dd/mm/yyyy):").grid(row=1, column=0, sticky='e', padx=5, pady=4)
+        self._cap_fecha_var = tk.StringVar(value=datetime.now().strftime('%d/%m/%Y'))
+        ttk.Entry(det, textvariable=self._cap_fecha_var, width=15).grid(row=1, column=1, pady=4, sticky='w')
+
+        ttk.Label(det, text="Hora (HH:MM):").grid(row=2, column=0, sticky='e', padx=5, pady=4)
+        self._cap_hora_var = tk.StringVar()
+        ttk.Entry(det, textvariable=self._cap_hora_var, width=10).grid(row=2, column=1, pady=4, sticky='w')
+
+        # ── selección de trabajadores ─────────────────────────────────────────
+        sel = ttk.LabelFrame(tab, text="Asistentes", padding=10)
+        sel.pack(fill='both', expand=True, pady=(0, 8))
+
+        top = ttk.Frame(sel)
+        top.pack(fill='x', pady=(0, 5))
+        ttk.Label(top, text="Trabajador:").pack(side='left', padx=(0, 5))
+        self._cap_combo = ttk.Combobox(top, width=45, state='readonly')
+        self._cap_combo.pack(side='left', padx=(0, 8))
+        ttk.Button(top, text="Agregar", command=self._cap_agregar).pack(side='left', padx=(0, 5))
+        ttk.Button(top, text="Quitar seleccionado", command=self._cap_quitar).pack(side='left')
+
+        self._cap_listbox = tk.Listbox(sel, height=8, font=('Consolas', 9))
+        sb = ttk.Scrollbar(sel, orient='vertical', command=self._cap_listbox.yview)
+        self._cap_listbox.configure(yscrollcommand=sb.set)
+        sb.pack(side='right', fill='y')
+        self._cap_listbox.pack(fill='both', expand=True)
+
+        # ── botones ───────────────────────────────────────────────────────────
+        btns = ttk.Frame(tab)
+        btns.pack(fill='x')
+        ttk.Button(btns, text="Guardar registro Excel",
+                   command=self._cap_guardar).pack(side='left', padx=(0, 8))
+        ttk.Button(btns, text="Limpiar",
+                   command=self._cap_limpiar).pack(side='left')
+
+        # estado interno
+        self._cap_seleccionados: list[dict] = []   # trabajadores ya agregados
+        self._cap_disponibles:   list[dict] = []   # trabajadores disponibles para agregar
+        self._cap_refresh_combo()
+
+    def _cap_refresh_combo(self):
+        """Recarga la lista de disponibles desde la BD y actualiza el combo."""
+        seleccionados_dni = {t['dni'] for t in self._cap_seleccionados}
+        self._cap_disponibles = [
+            t for t in listar_activos() if t['dni'] not in seleccionados_dni
+        ]
+        valores = [
+            f"{t['dni']} - {t['nombre']}"
+            for t in self._cap_disponibles
+        ]
+        self._cap_combo['values'] = valores
+        self._cap_combo.set('')
+
+    def _cap_agregar(self):
+        sel = self._cap_combo.get()
+        if not sel:
+            messagebox.showwarning("Aviso", "Selecciona un trabajador")
+            return
+        dni = sel.split(' - ')[0]
+        trabajador = next((t for t in self._cap_disponibles if t['dni'] == dni), None)
+        if trabajador is None:
+            return
+        self._cap_seleccionados.append(trabajador)
+        self._cap_listbox.insert(
+            tk.END, f"{trabajador['dni']}  {trabajador['nombre']}  |  {trabajador.get('cargo') or ''}"
+        )
+        self._cap_refresh_combo()
+
+    def _cap_quitar(self):
+        idx = self._cap_listbox.curselection()
+        if not idx:
+            messagebox.showwarning("Aviso", "Selecciona un trabajador de la lista")
+            return
+        i = idx[0]
+        self._cap_seleccionados.pop(i)
+        self._cap_listbox.delete(i)
+        self._cap_refresh_combo()
+
+    def _cap_limpiar(self):
+        self._cap_tema_var.set('')
+        self._cap_fecha_var.set(datetime.now().strftime('%d/%m/%Y'))
+        self._cap_hora_var.set('')
+        self._cap_seleccionados.clear()
+        self._cap_listbox.delete(0, tk.END)
+        self._cap_refresh_combo()
+
+    def _cap_guardar(self):
+        tema  = self._cap_tema_var.get().strip()
+        fecha = self._cap_fecha_var.get().strip()
+        hora  = self._cap_hora_var.get().strip()
+        if not all([tema, fecha, hora]):
+            messagebox.showwarning("Aviso", "Tema, fecha y hora son obligatorios")
+            return
+        if not self._cap_seleccionados:
+            messagebox.showwarning("Aviso", "Agrega al menos un trabajador")
+            return
+        try:
+            ruta = guardar_registro_capacitacion(tema, fecha, hora, self._cap_seleccionados)
+            messagebox.showinfo(
+                "Listo",
+                f"Registro guardado en:\n{ruta}"
+            )
+        except Exception as exc:
+            messagebox.showerror("Error", str(exc))
 
 
 # ── entry point ──────────────────────────────────────────────────────────────
