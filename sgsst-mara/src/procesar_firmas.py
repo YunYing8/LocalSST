@@ -63,8 +63,11 @@ def procesar_todas_firmas() -> dict:
     ]
 
     for archivo in archivos:
-        # Normalise to firma_{dni}.png regardless of original extension
-        ruta_salida = CARPETA_SALIDA / (archivo.stem + '.png')
+        # Normalizar a firma_{dni}.png sin importar el nombre original
+        stem = archivo.stem
+        if not stem.startswith('firma_'):
+            stem = f'firma_{stem}'
+        ruta_salida = CARPETA_SALIDA / (stem + '.png')
 
         if ruta_salida.exists():
             omitidas += 1
