@@ -14,7 +14,7 @@ from src.importar_excel import importar_trabajadores
 from src.importar_sheets import sincronizar_desde_sheets
 from src.procesar_firmas import procesar_todas_firmas
 from src.registro_capacitacion import guardar_registro_capacitacion
-from src.trabajadores import buscar_por_dni, listar_activos
+from src.trabajadores import buscar_por_dni, listar_activos, nombre_completo
 
 
 # ── helpers ─────────────────────────────────────────────────────────────────
@@ -165,19 +165,20 @@ class App(tk.Tk):
             _write(self._txt_trabajadores, "No hay trabajadores activos registrados.")
             return
 
-        w_dni    = max(max(len(str(t['dni']))            for t in activos), 3)
-        w_nombre = max(max(len(str(t['nombre']))         for t in activos), 6)
-        w_cargo  = max(max(len(str(t['cargo'] or ''))    for t in activos), 5)
+        nombres = [nombre_completo(t) for t in activos]
+        w_dni    = max(max(len(str(t['dni']))         for t in activos), 3)
+        w_nombre = max(max(len(n)                     for n in nombres),  6)
+        w_cargo  = max(max(len(str(t['cargo'] or '')) for t in activos), 5)
 
         sep    = f"+-{'-'*w_dni}-+-{'-'*w_nombre}-+-{'-'*w_cargo}-+"
         header = (f"| {'DNI'.ljust(w_dni)} "
                   f"| {'NOMBRE'.ljust(w_nombre)} "
                   f"| {'CARGO'.ljust(w_cargo)} |")
         lines  = [sep, header, sep]
-        for t in activos:
+        for t, nombre in zip(activos, nombres):
             lines.append(
                 f"| {str(t['dni']).ljust(w_dni)} "
-                f"| {str(t['nombre']).ljust(w_nombre)} "
+                f"| {nombre.ljust(w_nombre)} "
                 f"| {str(t['cargo'] or '-').ljust(w_cargo)} |"
             )
         lines += [sep, f"  Total: {len(activos)} trabajadores activos"]
@@ -386,7 +387,7 @@ class App(tk.Tk):
             t for t in listar_activos() if t['dni'] not in seleccionados_dni
         ]
         valores = [
-            f"{t['dni']} - {t['nombre']}"
+            f"{t['dni']} - {nombre_completo(t)}"
             for t in self._cap_disponibles
         ]
         self._cap_combo['values'] = valores
@@ -403,7 +404,7 @@ class App(tk.Tk):
             return
         self._cap_seleccionados.append(trabajador)
         self._cap_listbox.insert(
-            tk.END, f"{trabajador['dni']}  {trabajador['nombre']}  |  {trabajador.get('cargo') or ''}"
+            tk.END, f"{trabajador['dni']}  {nombre_completo(trabajador)}  |  {trabajador.get('cargo') or ''}"
         )
         self._cap_refresh_combo()
 

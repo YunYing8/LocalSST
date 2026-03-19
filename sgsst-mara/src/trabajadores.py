@@ -5,6 +5,13 @@ from src.database import get_connection
 _ESTADOS_VALIDOS = {"ACTIVO", "INACTIVO"}
 
 
+def nombre_completo(t: dict) -> str:
+    """Retorna 'APELLIDO NOMBRE' a partir de un dict de trabajador."""
+    apellido = (t.get('apellido') or '').strip()
+    nombre   = (t.get('nombre')   or '').strip()
+    return f"{apellido} {nombre}".strip() if apellido else nombre
+
+
 def buscar_por_dni(dni: str) -> dict | None:
     with get_connection() as conn:
         row = conn.execute(

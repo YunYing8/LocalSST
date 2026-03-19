@@ -88,8 +88,9 @@ def generar_constancia(
         doc = DocxTemplate(str(PLANTILLA_RISST))
 
         ruta_firma = CARPETA_FIRMAS / f"firma_{dni}.png"
+        nombre_completo = f"{apellido} {nombre}".strip() if apellido else nombre
         contexto = {
-            'NOMBRE':    nombre,
+            'NOMBRE':    nombre_completo,
             'APELLIDOS': apellido or nombre,
             'DNI':       dni,
             'CARGO':     cargo or '',
@@ -101,7 +102,7 @@ def generar_constancia(
         doc.render(contexto)
         _aplicar_fuente(doc)
 
-        nombre_docx = f"constancia_RISST_{_safe_filename(nombre)}.docx"
+        nombre_docx = f"constancia_RISST_{_safe_filename(nombre_completo)}.docx"
         ruta_docx   = CARPETA_SALIDA / nombre_docx
         doc.save(str(ruta_docx))
 

@@ -78,13 +78,12 @@ def sincronizar_desde_sheets() -> dict:
                     omitidos += 1
                     continue
 
-                apellido  = _get(fila, idx_apellido) or ''
-                nombre_p  = _get(fila, idx_nombre) or ''
+                apellido = _get(fila, idx_apellido) or ''
+                nombre_p = _get(fila, idx_nombre) or ''
                 if not apellido and not nombre_p:
                     omitidos += 1
                     continue
 
-                nombre_completo = f"{apellido} {nombre_p}".strip()
                 cargo    = _get(fila, idx_cargo)
                 estado   = (_get(fila, idx_estado) or 'ACTIVO').upper()
                 fecha_nac = _get(fila, idx_fn)
@@ -97,7 +96,7 @@ def sincronizar_desde_sheets() -> dict:
 
                 conn.execute(
                     _UPSERT,
-                    (dni, nombre_completo, apellido, cargo, fecha_nac,
+                    (dni, nombre_p, apellido, cargo, fecha_nac,
                      correo, celular, estado),
                 )
 

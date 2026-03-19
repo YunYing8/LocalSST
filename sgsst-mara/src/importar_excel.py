@@ -79,8 +79,7 @@ def importar_trabajadores(ruta_excel: str | Path) -> dict:
                     omitidos += 1
                     continue
 
-                # Formato canónico: APELLIDO NOMBRE
-                nombre = f"{apellido_str} {nombre_raw}".strip()
+                nombre = nombre_raw
 
                 cargo     = _cell(row, indices, 'cargo')
                 fecha_nac = _cell(row, indices, 'fecha_nacimiento')

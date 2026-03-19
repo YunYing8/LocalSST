@@ -47,10 +47,12 @@ def guardar_registro_capacitacion(
     ws['AI15'] = hora
 
     for i, t in enumerate(trabajadores):
-        fila   = 18 + i
-        dni    = t['dni']
-        nombre = t['nombre']
-        cargo  = t.get('cargo') or ''
+        fila     = 18 + i
+        dni      = t['dni']
+        apellido = (t.get('apellido') or '').strip()
+        nombre_p = (t.get('nombre')   or '').strip()
+        nombre   = f"{apellido} {nombre_p}".strip() if apellido else nombre_p
+        cargo    = t.get('cargo') or ''
 
         ws.merge_cells(f'B{fila}:M{fila}')
         ws[f'B{fila}'] = nombre
