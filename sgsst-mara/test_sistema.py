@@ -17,7 +17,6 @@ failed = 0
 
 
 def check(label: str, number: int):
-    """Return a context manager that prints PASS/FAIL for the given test."""
     import contextlib
 
     @contextlib.contextmanager
@@ -49,17 +48,28 @@ if __name__ == "__main__":
         assert "trabajadores" in tables, "Table 'trabajadores' missing"
         assert "documentos_generados" in tables, "Table 'documentos_generados' missing"
 
+        # Verify apellido column exists
+        with get_connection() as conn:
+            cols = {
+                row[1]
+                for row in conn.execute(
+                    "PRAGMA table_info(trabajadores)"
+                ).fetchall()
+            }
+        assert "apellido" in cols, "Column 'apellido' missing"
+
     # TEST 2 - registrar_trabajador()
     with check("registrar_trabajador() ...", 2):
         result = registrar_trabajador(
             {
-                "dni": "99999999",
-                "nombre": "TEST TRABAJADOR",
-                "cargo": "PRUEBA",
+                "dni":             "99999999",
+                "nombre":          "TRABAJADOR TEST",
+                "apellido":        "TRABAJADOR",
+                "cargo":           "PRUEBA",
                 "fecha_nacimiento": "01/01/1990",
-                "correo": "test@test.com",
-                "celular": "999000000",
-                "estado": "ACTIVO",
+                "correo":          "test@test.com",
+                "celular":         "999000000",
+                "estado":          "ACTIVO",
             }
         )
         assert result is True, f"Expected True, got {result}"
@@ -68,15 +78,16 @@ if __name__ == "__main__":
     with check("buscar_por_dni() ........", 3):
         t = buscar_por_dni("99999999")
         assert t is not None, "Expected a dict, got None"
-        assert t["nombre"] == "TEST TRABAJADOR", f"Unexpected nombre: {t['nombre']}"
+        assert t["nombre"] == "TRABAJADOR TEST", f"Unexpected nombre: {t['nombre']}"
+        assert t["apellido"] == "TRABAJADOR", f"Unexpected apellido: {t['apellido']}"
+        assert t["created_at"] is not None, "created_at missing"
 
     # TEST 4 - listar_activos()
     with check("listar_activos() ........", 4):
         activos = listar_activos()
         assert len(activos) >= 1, "Expected at least 1 active worker"
-        assert all(
-            r["estado"] == "ACTIVO" for r in activos
-        ), "Some records have estado != ACTIVO"
+        assert all(r["estado"] == "ACTIVO" for r in activos), \
+            "Some records have estado != ACTIVO"
 
     # TEST 5 - cambiar_estado()
     with check("cambiar_estado() ........", 5):
@@ -98,33 +109,17 @@ if __name__ == "__main__":
     with check("importar_trabajadores() ..", 7):
         wb = openpyxl.Workbook()
         ws = wb.active
-        ws.append(
-            [
-                "Nombre",
-                "Apellido",
-                "DNI",
-                "Cargo",
-                "Fecha de nacimiento",
-                "Edad",
-                "Correo electrónico",
-                "Celular",
-                "Estado",
-            ]
-        )
-        ws.append(
-            [
-                "JUAN",
-                "PEREZ LOPEZ",
-                "11111111",
-                "RIGGER",
-                "01/01/1985",
-                40,
-                "juan@test.com",
-                "911000000",
-                "ACTIVO",
-            ]
-        )
-        # Invalid row — all None except Estado
+        ws.append([
+            "Nombre", "Apellido", "DNI", "Cargo",
+            "Fecha de nacimiento", "Edad",
+            "Correo electrónico", "Celular", "Estado",
+        ])
+        # Valid row — nombre stored as "PEREZ LOPEZ JUAN"
+        ws.append([
+            "JUAN", "PEREZ LOPEZ", "11111111", "RIGGER",
+            "01/01/1985", 40, "juan@test.com", "911000000", "ACTIVO",
+        ])
+        # Invalid row — DNI and Nombre are None
         ws.append([None, None, None, None, None, None, None, None, "ACTIVO"])
 
         with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp:
@@ -136,7 +131,13 @@ if __name__ == "__main__":
             os.unlink(tmp_path)
 
         assert res["importados"] == 1, f"Expected importados=1, got {res['importados']}"
-        assert res["omitidos"] == 1, f"Expected omitidos=1, got {res['omitidos']}"
+        assert res["omitidos"]   == 1, f"Expected omitidos=1, got {res['omitidos']}"
+
+        t2 = buscar_por_dni("11111111")
+        assert t2 is not None, "Imported worker not found"
+        assert t2["apellido"] == "PEREZ LOPEZ", f"Unexpected apellido: {t2['apellido']}"
+        assert t2["nombre"] == "PEREZ LOPEZ JUAN", f"Unexpected nombre: {t2['nombre']}"
+        assert t2["created_at"] is not None, "created_at missing"
 
     # TEST 8 - cleanup
     with check("cleanup .................", 8):

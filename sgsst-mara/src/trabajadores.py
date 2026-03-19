@@ -36,11 +36,12 @@ def registrar_trabajador(datos: dict) -> bool:
     with get_connection() as conn:
         cursor = conn.execute(
             """INSERT OR IGNORE INTO trabajadores
-               (dni, nombre, cargo, fecha_nacimiento, correo, celular, estado, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+               (dni, nombre, apellido, cargo, fecha_nacimiento, correo, celular, estado, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 datos["dni"],
                 datos["nombre"],
+                datos.get("apellido"),
                 datos.get("cargo"),
                 datos.get("fecha_nacimiento"),
                 datos.get("correo"),
