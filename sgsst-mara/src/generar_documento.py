@@ -1,23 +1,31 @@
-from pathlib import Path
+import re
 from datetime import datetime
+from pathlib import Path
 
 import pythoncom
 import win32com.client
-from docxtpl import DocxTemplate, InlineImage
 from docx.shared import Cm, Pt
+from docxtpl import DocxTemplate, InlineImage
 
-from src.database import get_connection, DB_PATH
-
-PROJECT_ROOT   = DB_PATH.parent.parent
-RUTA_PLANTILLA = PROJECT_ROOT / "data" / "plantillas" / "plantilla_risst.docx"
-CARPETA_FIRMAS = PROJECT_ROOT / "data" / "firmas"
-CARPETA_SALIDA = PROJECT_ROOT / "documentos_generados"
+from src.config import (
+    CARPETA_FIRMAS,
+    CARPETA_SALIDA,
+    PLANTILLA_RISST,
+)
+from src.database import get_connection
 
 _MESES = {
     1: 'enero',    2: 'febrero',  3: 'marzo',    4: 'abril',
     5: 'mayo',     6: 'junio',    7: 'julio',     8: 'agosto',
     9: 'septiembre', 10: 'octubre', 11: 'noviembre', 12: 'diciembre',
 }
+
+_INVALID_CHARS = re.compile(r'[\\/:*?"<>|]')
+
+
+def _safe_filename(text: str) -> str:
+    """Elimina caracteres inválidos para nombres de archivo."""
+    return _INVALID_CHARS.sub('_', text).replace(' ', '_')
 
 
 def convertir_fecha(fecha_str: str) -> str:
@@ -44,15 +52,16 @@ def _aplicar_fuente(doc: DocxTemplate) -> None:
                         run.font.size = Pt(11)
 
 
-def _docx_a_pdf(ruta_docx: Path, word_app) -> None:
-    """Convierte un .docx a PDF usando la instancia de Word proporcionada."""
+def _docx_a_pdf(ruta_docx: Path, word_app) -> Path:
+    """Convierte un .docx a PDF. Retorna la ruta del PDF generado."""
     wdFormatPDF = 17
+    ruta_pdf = ruta_docx.with_suffix('.pdf')
     doc = word_app.Documents.Open(str(ruta_docx))
     try:
-        ruta_pdf = str(ruta_docx).replace('.docx', '.pdf')
-        doc.SaveAs(ruta_pdf, FileFormat=wdFormatPDF)
+        doc.SaveAs(str(ruta_pdf), FileFormat=wdFormatPDF)
     finally:
         doc.Close(False)
+    return ruta_pdf
 
 
 def generar_constancia(
@@ -70,13 +79,15 @@ def generar_constancia(
     try:
         CARPETA_SALIDA.mkdir(parents=True, exist_ok=True)
 
-        if not RUTA_PLANTILLA.exists():
-            return False, f"Plantilla no encontrada: {RUTA_PLANTILLA}"
+        if not PLANTILLA_RISST.exists():
+            return False, f"Plantilla no encontrada: {PLANTILLA_RISST}"
 
-        doc = DocxTemplate(str(RUTA_PLANTILLA))
+        if word_app is None:
+            return False, "No hay instancia de Word disponible"
+
+        doc = DocxTemplate(str(PLANTILLA_RISST))
 
         ruta_firma = CARPETA_FIRMAS / f"firma_{dni}.png"
-
         contexto = {
             'NOMBRE':    nombre,
             'APELLIDOS': apellido or nombre,
@@ -90,25 +101,19 @@ def generar_constancia(
         doc.render(contexto)
         _aplicar_fuente(doc)
 
-        nombre_docx = f"constancia_RISST_{nombre.replace(' ', '_')}.docx"
+        nombre_docx = f"constancia_RISST_{_safe_filename(nombre)}.docx"
         ruta_docx   = CARPETA_SALIDA / nombre_docx
         doc.save(str(ruta_docx))
 
-        _docx_a_pdf(ruta_docx, word_app)
-        nombre_pdf = nombre_docx.replace('.docx', '.pdf')
+        ruta_pdf   = _docx_a_pdf(ruta_docx, word_app)
+        nombre_pdf = ruta_pdf.name
 
-        # Registrar en historial
         with get_connection() as conn:
             conn.execute(
                 """INSERT INTO documentos_generados
-                   (dni_trabajador, tipo_documento, fecha_generacion, ruta_archivo)
-                   VALUES (?, ?, ?, ?)""",
-                (
-                    dni,
-                    'CONSTANCIA_RISST',
-                    datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                    str(CARPETA_SALIDA / nombre_pdf),
-                ),
+                   (dni_trabajador, tipo_documento, ruta_archivo)
+                   VALUES (?, 'CONSTANCIA_RISST', ?)""",
+                (dni, str(ruta_pdf)),
             )
 
         return True, nombre_pdf

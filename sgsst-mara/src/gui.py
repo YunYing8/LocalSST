@@ -363,13 +363,16 @@ class App(tk.Tk):
         sb.pack(side='right', fill='y')
         self._cap_listbox.pack(fill='both', expand=True)
 
-        # ── botones ───────────────────────────────────────────────────────────
+        # ── botones y progreso ────────────────────────────────────────────────
         btns = ttk.Frame(tab)
-        btns.pack(fill='x')
+        btns.pack(fill='x', pady=(0, 4))
         ttk.Button(btns, text="Guardar registro Excel",
                    command=self._cap_guardar).pack(side='left', padx=(0, 8))
         ttk.Button(btns, text="Limpiar",
                    command=self._cap_limpiar).pack(side='left')
+
+        self._prog_cap = ttk.Progressbar(tab, mode='indeterminate', length=500)
+        self._prog_cap.pack(fill='x')
 
         # estado interno
         self._cap_seleccionados: list[dict] = []   # trabajadores ya agregados
@@ -432,14 +435,20 @@ class App(tk.Tk):
         if not self._cap_seleccionados:
             messagebox.showwarning("Aviso", "Agrega al menos un trabajador")
             return
-        try:
-            ruta = guardar_registro_capacitacion(tema, fecha, hora, self._cap_seleccionados)
-            messagebox.showinfo(
-                "Listo",
-                f"Registro guardado en:\n{ruta}"
-            )
-        except Exception as exc:
-            messagebox.showerror("Error", str(exc))
+
+        self._prog_cap.start()
+        seleccionados = list(self._cap_seleccionados)
+
+        def run():
+            try:
+                ruta = guardar_registro_capacitacion(tema, fecha, hora, seleccionados)
+                self.after(0, lambda: messagebox.showinfo("Listo", f"Registro guardado en:\n{ruta}"))
+            except Exception as exc:
+                self.after(0, lambda: messagebox.showerror("Error", str(exc)))
+            finally:
+                self.after(0, self._prog_cap.stop)
+
+        threading.Thread(target=run, daemon=True).start()
 
 
 # ── entry point ──────────────────────────────────────────────────────────────

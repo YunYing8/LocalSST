@@ -4,8 +4,6 @@ Procesador de firmas usando la API de remove.bg.
 Estructura esperada:
     data/firmas_originales/firma_XXXXXXXX.png   ← archivos de entrada
     data/firmas/firma_XXXXXXXX.png              ← archivos procesados
-
-El nombre del archivo debe seguir el patrón: firma_{DNI}.{ext}
 """
 from io import BytesIO
 from pathlib import Path
@@ -13,27 +11,28 @@ from pathlib import Path
 import requests
 from PIL import Image
 
-from src.database import DB_PATH
+from src.config import (
+    CARPETA_FIRMAS,
+    CARPETA_FIRMAS_ORIG,
+    FIRMA_ALTO_PX,
+    REMOVEBG_API_KEY,
+    REMOVEBG_URL,
+)
 
-PROJECT_ROOT    = DB_PATH.parent.parent
-CARPETA_ENTRADA = PROJECT_ROOT / "data" / "firmas_originales"
-CARPETA_SALIDA  = PROJECT_ROOT / "data" / "firmas"
-ALTO_FINAL      = 65
-_EXTENSIONES    = {'.png', '.jpg', '.jpeg'}
-_API_KEY        = "TW85KXjQCpmyVS35yYoeybso"
-_API_URL        = "https://api.remove.bg/v1.0/removebg"
+_EXTENSIONES = {'.png', '.jpg', '.jpeg'}
 
 
 def procesar_firma(ruta_entrada: Path, ruta_salida: Path) -> None:
-    """Quita el fondo vía remove.bg y redimensiona una firma. Lanza excepción si falla."""
+    """Quita el fondo vía remove.bg y redimensiona una firma."""
     with open(ruta_entrada, 'rb') as f:
         datos = f.read()
 
     response = requests.post(
-        _API_URL,
+        REMOVEBG_URL,
         files={'image_file': datos},
-        headers={'X-Api-Key': _API_KEY},
+        headers={'X-Api-Key': REMOVEBG_API_KEY},
         data={'size': 'auto'},
+        timeout=30,
     )
 
     if response.status_code != 200:
@@ -42,11 +41,10 @@ def procesar_firma(ruta_entrada: Path, ruta_salida: Path) -> None:
         )
 
     imagen = Image.open(BytesIO(response.content))
-
     ancho_orig, alto_orig = imagen.size
-    proporcion  = ALTO_FINAL / alto_orig
-    ancho_final = int(ancho_orig * proporcion)
-    imagen_redim = imagen.resize((ancho_final, ALTO_FINAL), Image.Resampling.LANCZOS)
+    proporcion   = FIRMA_ALTO_PX / alto_orig
+    ancho_final  = int(ancho_orig * proporcion)
+    imagen_redim = imagen.resize((ancho_final, FIRMA_ALTO_PX), Image.Resampling.LANCZOS)
 
     ruta_salida.parent.mkdir(parents=True, exist_ok=True)
     imagen_redim.save(str(ruta_salida), format='PNG')
@@ -54,33 +52,30 @@ def procesar_firma(ruta_entrada: Path, ruta_salida: Path) -> None:
 
 def procesar_todas_firmas() -> dict:
     """
-    Procesa todas las imágenes en CARPETA_ENTRADA que aún no tienen
-    su versión procesada en CARPETA_SALIDA.
+    Procesa las imágenes en CARPETA_FIRMAS_ORIG que aún no están procesadas.
     Retorna {"procesadas": int, "omitidas": int, "errores": list[str]}
     """
-    if not CARPETA_ENTRADA.exists():
+    if not CARPETA_FIRMAS_ORIG.exists():
         return {
             "procesadas": 0,
             "omitidas":   0,
-            "errores":    [f"Carpeta no encontrada: {CARPETA_ENTRADA}"],
+            "errores":    [f"Carpeta no encontrada: {CARPETA_FIRMAS_ORIG}"],
         }
 
-    CARPETA_SALIDA.mkdir(parents=True, exist_ok=True)
+    CARPETA_FIRMAS.mkdir(parents=True, exist_ok=True)
 
     procesadas = 0
     omitidas   = 0
     errores: list[str] = []
 
-    archivos = [
-        f for f in sorted(CARPETA_ENTRADA.iterdir())
-        if f.suffix.lower() in _EXTENSIONES
-    ]
+    for archivo in sorted(CARPETA_FIRMAS_ORIG.iterdir()):
+        if archivo.suffix.lower() not in _EXTENSIONES:
+            continue
 
-    for archivo in archivos:
         stem = archivo.stem
         if not stem.startswith('firma_'):
             stem = f'firma_{stem}'
-        ruta_salida = CARPETA_SALIDA / (stem + '.png')
+        ruta_salida = CARPETA_FIRMAS / (stem + '.png')
 
         if ruta_salida.exists():
             omitidas += 1

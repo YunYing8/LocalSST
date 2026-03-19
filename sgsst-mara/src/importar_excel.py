@@ -1,56 +1,96 @@
 import openpyxl
-from datetime import datetime
+from pathlib import Path
 
 from src.database import get_connection
 
 _INSERT = """
 INSERT OR IGNORE INTO trabajadores
     (dni, nombre, apellido, cargo, fecha_nacimiento, correo, celular, estado, created_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%d %H:%M:%S', 'now'))
 """
 
+# Mapeo: nombre de columna en el Excel → clave interna
+_COL_MAP = {
+    'nombre':           'nombre',
+    'apellido':         'apellido',
+    'dni':              'dni',
+    'cargo':            'cargo',
+    'fecha_nacimiento': 'fecha_nacimiento',
+    'fecha nacimiento': 'fecha_nacimiento',
+    'correo':           'correo',
+    'correo electronico': 'correo',
+    'correo electrónico': 'correo',
+    'celular':          'celular',
+    'telefono':         'celular',
+    'teléfono':         'celular',
+    'estado':           'estado',
+}
 
-def importar_trabajadores(ruta_excel: str) -> dict:
-    wb = openpyxl.load_workbook(ruta_excel, read_only=True, data_only=True)
+
+def _cell(row: tuple, indices: dict, key: str) -> str | None:
+    idx = indices.get(key)
+    if idx is None or idx >= len(row):
+        return None
+    val = row[idx]
+    return str(val).strip() if val is not None else None
+
+
+def importar_trabajadores(ruta_excel: str | Path) -> dict:
+    wb = openpyxl.load_workbook(str(ruta_excel), read_only=True, data_only=True)
     ws = wb.worksheets[0]
 
     importados = 0
-    omitidos = 0
-    errores = []
+    omitidos   = 0
+    errores    = []
+
+    # Leer encabezados de la primera fila para mapear columnas dinámicamente
+    header_row = next(ws.iter_rows(min_row=1, max_row=1, values_only=True), None)
+    if header_row is None:
+        wb.close()
+        return {"importados": 0, "omitidos": 0, "errores": ["El archivo está vacío"]}
+
+    indices: dict[str, int] = {}
+    for col_idx, cell in enumerate(header_row):
+        if cell is not None:
+            key = str(cell).strip().lower()
+            if key in _COL_MAP:
+                indices[_COL_MAP[key]] = col_idx
+
+    if 'dni' not in indices or 'nombre' not in indices:
+        wb.close()
+        return {
+            "importados": 0,
+            "omitidos":   0,
+            "errores":    ["No se encontraron las columnas obligatorias 'DNI' y 'Nombre'"],
+        }
 
     conn = get_connection()
     try:
         for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
             try:
-                nombre_col, apellido_col, dni_raw, cargo, fecha_nac, _edad, correo, celular, estado = row
-
-                # Validate DNI
-                dni = str(dni_raw).strip() if dni_raw is not None else None
-                if not dni or dni == "None":
+                dni = _cell(row, indices, 'dni')
+                if not dni or dni.lower() == 'none':
                     omitidos += 1
                     continue
 
-                # Validate nombre
-                nombre_raw = str(nombre_col).strip() if nombre_col else ""
-                if not nombre_raw or nombre_raw == "None":
+                nombre_raw   = _cell(row, indices, 'nombre') or ''
+                apellido_str = _cell(row, indices, 'apellido') or ''
+                if not nombre_raw and not apellido_str:
                     omitidos += 1
                     continue
 
-                # Store as "APELLIDO NOMBRE" — matches constancia format
-                apellido_str = str(apellido_col).strip() if apellido_col else ""
+                # Formato canónico: APELLIDO NOMBRE
                 nombre = f"{apellido_str} {nombre_raw}".strip()
 
-                estado_val  = str(estado).strip().upper() if estado else "ACTIVO"
-                fecha_str   = str(fecha_nac).strip() if fecha_nac is not None else None
-                cargo_str   = str(cargo).strip() if cargo is not None else None
-                correo_str  = str(correo).strip() if correo is not None else None
-                celular_str = str(celular).strip() if celular is not None else None
-                created_at  = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                cargo     = _cell(row, indices, 'cargo')
+                fecha_nac = _cell(row, indices, 'fecha_nacimiento')
+                correo    = _cell(row, indices, 'correo')
+                celular   = _cell(row, indices, 'celular')
+                estado    = (_cell(row, indices, 'estado') or 'ACTIVO').upper()
 
                 cursor = conn.execute(
                     _INSERT,
-                    (dni, nombre, apellido_str, cargo_str, fecha_str,
-                     correo_str, celular_str, estado_val, created_at),
+                    (dni, nombre, apellido_str, cargo, fecha_nac, correo, celular, estado),
                 )
                 if cursor.rowcount == 1:
                     importados += 1

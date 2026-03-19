@@ -1,15 +1,15 @@
 import csv
+
 import requests
-from datetime import datetime
 
+from src.config import GOOGLE_SHEET_ID
 from src.database import get_connection
-
-GOOGLE_SHEET_ID = '1N0i-sG3UBH2UMVo_DF4Ivcwxyr2MvgIfAa4h18oQ5oc'
 
 _UPSERT = """
 INSERT INTO trabajadores
-    (dni, nombre, apellido, cargo, fecha_nacimiento, correo, celular, estado, created_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (dni, nombre, apellido, cargo, fecha_nacimiento, correo, celular, estado,
+     created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%d %H:%M:%S', 'now'))
 ON CONFLICT(dni) DO UPDATE SET
     nombre           = excluded.nombre,
     apellido         = excluded.apellido,
@@ -24,8 +24,6 @@ ON CONFLICT(dni) DO UPDATE SET
 def sincronizar_desde_sheets() -> dict:
     """
     Descarga la hoja 'Registro' del Google Sheet y sincroniza contra SQLite.
-    - Nuevos DNI   → INSERT
-    - DNI ya existe → UPDATE (nombre, cargo, estado, etc.)
     Retorna: {"nuevos": int, "actualizados": int, "omitidos": int, "errores": list}
     """
     url = (
@@ -44,49 +42,55 @@ def sincronizar_desde_sheets() -> dict:
     def _idx(col: str) -> int | None:
         return encabezados.index(col) if col in encabezados else None
 
-    idx_nombre   = encabezados.index('Nombre')
-    idx_apellido = encabezados.index('Apellido')
-    idx_dni      = encabezados.index('DNI')
-    idx_cargo    = encabezados.index('Cargo')
-    idx_estado   = encabezados.index('Estado')
-    idx_fn       = _idx('Fecha de nacimiento')
-    idx_correo   = _idx('Correo electrónico')
-    idx_celular  = _idx('Celular')
-
-    nuevos      = 0
-    actualizados = 0
-    omitidos    = 0
-    errores     = []
-
-    conn = get_connection()
+    # Columnas obligatorias
     try:
+        idx_nombre   = encabezados.index('Nombre')
+        idx_apellido = encabezados.index('Apellido')
+        idx_dni      = encabezados.index('DNI')
+        idx_cargo    = encabezados.index('Cargo')
+        idx_estado   = encabezados.index('Estado')
+    except ValueError as exc:
+        return {"nuevos": 0, "actualizados": 0, "omitidos": 0,
+                "errores": [f"Columna faltante en el Sheet: {exc}"]}
+
+    # Columnas opcionales
+    idx_fn      = _idx('Fecha de nacimiento')
+    idx_correo  = _idx('Correo electrónico')
+    idx_celular = _idx('Celular')
+
+    nuevos       = 0
+    actualizados = 0
+    omitidos     = 0
+    errores      = []
+
+    def _get(fila, idx):
+        return fila[idx].strip() if idx is not None and idx < len(fila) else None
+
+    with get_connection() as conn:
         for i, fila in enumerate(lineas[1:], start=2):
             try:
                 if len(fila) <= idx_estado:
                     omitidos += 1
                     continue
 
-                dni = str(fila[idx_dni]).strip()
+                dni = _get(fila, idx_dni)
                 if not dni:
                     omitidos += 1
                     continue
 
-                apellido  = fila[idx_apellido].strip()
-                nombre_p  = fila[idx_nombre].strip()
+                apellido  = _get(fila, idx_apellido) or ''
+                nombre_p  = _get(fila, idx_nombre) or ''
                 if not apellido and not nombre_p:
                     omitidos += 1
                     continue
 
-                # Canonical format: APELLIDO NOMBRE
                 nombre_completo = f"{apellido} {nombre_p}".strip()
-                cargo    = fila[idx_cargo].strip() if len(fila) > idx_cargo else None
-                estado   = fila[idx_estado].strip().upper() if len(fila) > idx_estado else 'ACTIVO'
-                fecha_nac = fila[idx_fn].strip() if idx_fn is not None and len(fila) > idx_fn else None
-                correo    = fila[idx_correo].strip() if idx_correo is not None and len(fila) > idx_correo else None
-                celular   = fila[idx_celular].strip() if idx_celular is not None and len(fila) > idx_celular else None
-                created_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                cargo    = _get(fila, idx_cargo)
+                estado   = (_get(fila, idx_estado) or 'ACTIVO').upper()
+                fecha_nac = _get(fila, idx_fn)
+                correo    = _get(fila, idx_correo)
+                celular   = _get(fila, idx_celular)
 
-                # Check whether DNI already exists to distinguish new vs updated
                 existe = conn.execute(
                     "SELECT 1 FROM trabajadores WHERE dni = ?", (dni,)
                 ).fetchone()
@@ -94,7 +98,7 @@ def sincronizar_desde_sheets() -> dict:
                 conn.execute(
                     _UPSERT,
                     (dni, nombre_completo, apellido, cargo, fecha_nac,
-                     correo, celular, estado, created_at),
+                     correo, celular, estado),
                 )
 
                 if existe:
@@ -105,13 +109,9 @@ def sincronizar_desde_sheets() -> dict:
             except Exception as exc:
                 errores.append(f"Fila {i}: {exc}")
 
-        conn.commit()
-    finally:
-        conn.close()
-
     return {
-        "nuevos": nuevos,
+        "nuevos":       nuevos,
         "actualizados": actualizados,
-        "omitidos": omitidos,
-        "errores": errores,
+        "omitidos":     omitidos,
+        "errores":      errores,
     }
