@@ -1,6 +1,7 @@
 from pathlib import Path
 from datetime import datetime
 
+import pythoncom
 from docxtpl import DocxTemplate, InlineImage
 from docx.shared import Cm, Pt
 from docx2pdf import convert
@@ -81,7 +82,11 @@ def generar_constancia(
         ruta_docx   = CARPETA_SALIDA / nombre_docx
         doc.save(str(ruta_docx))
 
-        convert(str(ruta_docx))
+        pythoncom.CoInitialize()
+        try:
+            convert(str(ruta_docx))
+        finally:
+            pythoncom.CoUninitialize()
         nombre_pdf = nombre_docx.replace('.docx', '.pdf')
 
         # Registrar en historial
