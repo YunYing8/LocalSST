@@ -9,9 +9,11 @@ from datetime import datetime
 from openpyxl import load_workbook
 from openpyxl.drawing.image import Image as ExcelImage
 
-from src.config import CARPETA_FIRMAS, CARPETA_SALIDA, FIRMA_ALTO_PX, PROJECT_ROOT
+from src.config import CARPETA_FIRMAS, CARPETA_SALIDA, PROJECT_ROOT
 
-PLANTILLA_EPP = PROJECT_ROOT / "data" / "plantillas" / "EPPs.xlsx"
+PLANTILLA_EPP         = PROJECT_ROOT / "data" / "plantillas" / "EPPs.xlsx"
+# DNI del prevencionista (Alonso Mancilla) — firma siempre la columna ENTREGUÉ
+DNI_PREVENCIONISTA    = "48578094"
 
 EPPS_BASICOS = [
     "Casco de seguridad",
@@ -22,6 +24,14 @@ EPPS_BASICOS = [
     "Zapatos de seguridad",
     "Chaleco reflectivo",
 ]
+
+
+def _insertar_firma(ws, ruta_img, celda: str) -> None:
+    """Inserta la imagen en la celda indicada sin alterar su tamaño original."""
+    if ruta_img.exists():
+        img        = ExcelImage(str(ruta_img))
+        img.anchor = celda
+        ws.add_image(img)
 
 
 def generar_registro_epp(trabajador: dict, epps: list[str], fecha: str) -> str:
@@ -36,32 +46,33 @@ def generar_registro_epp(trabajador: dict, epps: list[str], fecha: str) -> str:
     wb = load_workbook(str(PLANTILLA_EPP))
     ws = wb.active
 
-    # ── Fecha (celda info superior derecha) ──────────────────────────────────
+    # ── Fecha ────────────────────────────────────────────────────────────────
     ws["I3"] = f"Fecha: {fecha}"
 
     # ── Datos del trabajador ─────────────────────────────────────────────────
     ws["C12"] = nombre
     ws["J12"] = dni
-    ws["G13"] = cargo
+    ws["H13"] = cargo          # cargo en H13
+
+    # ── Rutas de firma ───────────────────────────────────────────────────────
+    firma_trabajador    = CARPETA_FIRMAS / f"firma_{dni}.png"
+    firma_prevencionista = CARPETA_FIRMAS / f"firma_{DNI_PREVENCIONISTA}.png"
 
     # ── Filas de EPP (desde fila 16) ─────────────────────────────────────────
-    firma_path = CARPETA_FIRMAS / f"firma_{dni}.png"
-    row_h      = max(FIRMA_ALTO_PX, 50) * 0.75 + 8
-
     for i, epp in enumerate(epps):
         fila = 16 + i
-        ws.row_dimensions[fila].height = row_h
 
         ws[f"A{fila}"] = i + 1
         ws[f"B{fila}"] = fecha
         ws[f"C{fila}"] = epp
 
-        if firma_path.exists():
-            img        = ExcelImage(str(firma_path))
-            img.height = FIRMA_ALTO_PX
-            img.width  = int(FIRMA_ALTO_PX * 2.5)
-            img.anchor = f"E{fila}"
-            ws.add_image(img)
+        # Firma (RECIBÍ)   — columna E — firma del trabajador
+        _insertar_firma(ws, firma_trabajador,    f"E{fila}")
+        # Firma (ENTREGUÉ) — columna H — firma de Alonso Mancilla
+        _insertar_firma(ws, firma_prevencionista, f"H{fila}")
+
+    # ── Firma del prevencionista en H38 ──────────────────────────────────────
+    _insertar_firma(ws, firma_prevencionista, "H38")
 
     ts       = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"EPP_{dni}_{ts}.xlsx"
