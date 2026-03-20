@@ -15,6 +15,7 @@ CARPETA_FIRMAS_ORIG   = DATA_DIR / "firmas_originales"
 CARPETA_FIRMAS        = DATA_DIR / "firmas"
 PLANTILLA_RISST       = DATA_DIR / "plantillas" / "plantilla_risst.docx"
 PLANTILLA_ASISTENCIA  = DATA_DIR / "plantillas" / "plantilla_asistencia.xlsx"
+PLANTILLA_EPPS        = DATA_DIR / "plantillas" / "EPPs.xlsx"
 CARPETA_SALIDA        = PROJECT_ROOT / "documentos_generados"
 
 # ── Google Sheets ─────────────────────────────────────────────────────────────
